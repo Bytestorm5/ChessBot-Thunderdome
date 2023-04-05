@@ -227,7 +227,7 @@ impl Evaluate for Board {
 
     #[inline]
     fn mobility_value_for(&self, ally_color: Color) -> f64 {
-        (self.get_legal_moves_for(ally_color).len() - self.get_legal_moves_for(ally_color.invert()).len()) as f64
+        (self.get_legal_moves_for(ally_color).len() as f64) - (self.get_legal_moves_for(ally_color.invert()).len() as f64)
     }
 
     #[inline]
