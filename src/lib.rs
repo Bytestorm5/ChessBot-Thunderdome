@@ -358,10 +358,22 @@ pub trait Evaluate: Sized {
             None => [1.0, 0.0, 0.0, 0.0],
         };
         if depth == 0 {
-            return eval_engine[0] * self.value_for(getting_move_for) + 
-                    eval_engine[1] * self.mobility_value_for(getting_move_for) +
-                    eval_engine[2] * self.naive_value_for(getting_move_for) + 
-                    eval_engine[3] * self.control_value_for(getting_move_for);
+            let mut eval = 0.0;
+
+            if (eval_engine[0] != 0.0) {
+                eval += self.value_for(getting_move_for) * eval_engine[0]
+            }
+            if (eval_engine[1] != 0.0) {
+                eval += self.mobility_value_for(getting_move_for) * eval_engine[1]
+            }
+            if (eval_engine[2] != 0.0) {
+                eval += self.naive_value_for(getting_move_for) * eval_engine[2]
+            }
+            if (eval_engine[3] != 0.0) {
+                eval += self.control_value_for(getting_move_for) * eval_engine[3]
+            }
+
+            return eval
         }
 
         let legal_moves = self.get_legal_moves();
