@@ -226,6 +226,39 @@ impl Evaluate for Board {
     }
 
     #[inline]
+    fn mobility_value_for(&self, ally_color: Color) -> f64 {
+        (self.get_legal_moves_for(ally_color).len() - self.get_legal_moves_for(ally_color.invert()).len()) as f64
+    }
+
+    #[inline]
+    fn naive_value_for(&self, ally_color: Color) -> f64 {
+        self.squares
+            .iter()
+            .map(|square| match square.get_piece() {
+                Some(piece) => {
+                    if piece.get_color() == ally_color {
+                        1.0
+                    } else {
+                        -1.0
+                    }
+                }
+                None => 0.0,
+            })
+            .sum()
+    }
+    #[inline]
+    fn control_value_for(&self, ally_color: Color) -> f64 {
+        let mut control = 0;
+        for (i, _square) in self.squares.iter().enumerate() {
+            let row = 7 - i / 8;
+            let col = i % 8;
+            let square_pos = Position::new(row as i32, col as i32);
+            control += self.control_level(square_pos, ally_color)
+        }
+        control as f64
+    }
+
+    #[inline]
     fn get_current_player_color(&self) -> Color {
         self.turn
     }
@@ -239,6 +272,18 @@ impl Evaluate for Board {
     fn get_legal_moves(&self) -> Vec<Move> {
         let mut result = vec![];
         let color = self.get_current_player_color();
+        for square in &self.squares {
+            if let Some(piece) = square.get_piece() {
+                if piece.get_color() == color {
+                    result.extend(piece.get_legal_moves(self))
+                }
+            }
+        }
+
+        result
+    }
+    fn get_legal_moves_for(&self, color: Color) -> Vec<Move> {
+        let mut result = vec![];
         for square in &self.squares {
             if let Some(piece) = square.get_piece() {
                 if piece.get_color() == color {
@@ -353,11 +398,11 @@ impl Board {
     }
 
     pub fn rating_bar(&self, len: usize) -> String {
-        let (best_m, _, your_best_val) = self.get_best_next_move(2);
-        let (_, _, your_lowest_val) = self.get_worst_next_move(2);
+        let (best_m, _, your_best_val) = self.get_best_next_move(2, None);
+        let (_, _, your_lowest_val) = self.get_worst_next_move(2, None);
         let mut your_val = your_best_val + your_lowest_val;
-        let (_, _, their_best_val) = self.apply_move(best_m).change_turn().get_best_next_move(2);
-        let (_, _, their_lowest_val) = self.apply_move(best_m).change_turn().get_worst_next_move(2);
+        let (_, _, their_best_val) = self.apply_move(best_m).change_turn().get_best_next_move(2, None);
+        let (_, _, their_lowest_val) = self.apply_move(best_m).change_turn().get_worst_next_move(2, None);
         let mut their_val = their_best_val + their_lowest_val;
 
         if your_val < 0.0 {
@@ -553,6 +598,33 @@ impl Board {
         }
 
         false
+    }
+
+    /// How much control does the ally have on this square?
+    pub fn control_level(&self, pos: Position, ally_color: Color) -> i32 {
+        let mut control = 0;
+        for (i, square) in self.squares.iter().enumerate() {
+            let row = 7 - i / 8;
+            let col = i % 8;
+            let square_pos = Position::new(row as i32, col as i32);
+            if !square_pos.is_orthogonal_to(pos)
+                && !square_pos.is_diagonal_to(pos)
+                && !square_pos.is_knight_move(pos)
+            {
+                continue;
+            }
+
+            if let Some(piece) = square.get_piece() {
+                if piece.get_color() == ally_color {
+                    control += 1;
+                }
+
+                if piece.is_legal_attack(pos, self) {
+                    control -= 1;
+                }
+            }
+        }
+        control
     }
 
     /// Get whether or not the king of a given color is in check.

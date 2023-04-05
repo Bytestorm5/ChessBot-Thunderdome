@@ -47,11 +47,11 @@ pub fn get_symbol(piece: &Piece) -> impl ToString {
 }
 
 pub fn best_move(board: &Board) -> Move {
-    board.get_best_next_move(AI_DEPTH).0
+    board.get_best_next_move(AI_DEPTH, None).0
 }
 
 pub fn worst_move(board: &Board) -> Move {
-    board.get_worst_next_move(AI_DEPTH).0
+    board.get_worst_next_move(AI_DEPTH, None).0
 }
 
 pub fn random_move(board: &Board) -> Move {

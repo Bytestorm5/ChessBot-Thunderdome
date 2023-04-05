@@ -68,7 +68,14 @@ pub enum Color {
     White,
     Black,
 }
-
+impl Color {
+    fn invert(&self) -> Color {
+        match self {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }
+    }
+}
 impl core::fmt::Display for Color {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> Result<(), core::fmt::Error> {
         write!(
@@ -229,16 +236,26 @@ impl core::fmt::Display for Move {
 
 /// Evaluate a board and extract information, such as the best and worst moves.
 pub trait Evaluate: Sized {
-    /// Get the value of the board for a given color.
-    /// This subtracts the opponents value, and accounts for piece positions
-    /// and material value.
+    /// Get the value of the board using piece tables.
     fn value_for(&self, color: Color) -> f64;
+
+    /// Get the value of the board based on the mobility of pieces
+    fn mobility_value_for(&self, color: Color) -> f64;
+
+    /// Get the value of the board based on the simple amount of pieces
+    fn naive_value_for(&self, color: Color) -> f64;
+
+    /// Get the value of the board based on how many squares each side controls
+    fn control_value_for(&self, color: Color) -> f64;
 
     /// Get the current player's color.
     fn get_current_player_color(&self) -> Color;
 
     /// Get the legal moves for the current player.
     fn get_legal_moves(&self) -> Vec<Move>;
+    
+    ///Get the legal moves for a given player.
+    fn get_legal_moves_for(&self, color: Color) -> Vec<Move>;
 
     /// Apply a move to the board for evaluation.
     fn apply_eval_move(&self, m: Move) -> Self;
@@ -253,7 +270,7 @@ pub trait Evaluate: Sized {
     ///
     /// It's best not to use the rating value by itself for anything, as it
     /// is relative to the other player's move ratings as well.
-    fn get_best_next_move(&self, depth: i32) -> (Move, u64, f64) {
+    fn get_best_next_move(&self, depth: i32, engine: Option<[f64; 4]>) -> (Move, u64, f64) {
         let legal_moves = self.get_legal_moves();
         let mut best_move_value = -999999.0;
         let mut best_move = Move::Resign;
@@ -269,6 +286,7 @@ pub trait Evaluate: Sized {
                 false,
                 color,
                 &mut board_count,
+                engine
             );
             if child_board_value >= best_move_value {
                 best_move = *m;
@@ -289,7 +307,7 @@ pub trait Evaluate: Sized {
     ///
     /// It's best not to use the rating value by itself for anything, as it
     /// is relative to the other player's move ratings as well.
-    fn get_worst_next_move(&self, depth: i32) -> (Move, u64, f64) {
+    fn get_worst_next_move(&self, depth: i32, engine: Option<[f64; 4]>) -> (Move, u64, f64) {
         let legal_moves = self.get_legal_moves();
         let mut best_move_value = -999999.0;
         let mut best_move = Move::Resign;
@@ -305,6 +323,7 @@ pub trait Evaluate: Sized {
                 true,
                 !color,
                 &mut board_count,
+                engine
             );
 
             if child_board_value >= best_move_value {
@@ -331,11 +350,18 @@ pub trait Evaluate: Sized {
         is_maximizing: bool,
         getting_move_for: Color,
         board_count: &mut u64,
+        engine: Option<[f64; 4]>,
     ) -> f64 {
         *board_count += 1;
-
+        let eval_engine = match engine {
+            Some(a) => a,
+            None => [1.0, 0.0, 0.0, 0.0],
+        };
         if depth == 0 {
-            return self.value_for(getting_move_for);
+            return eval_engine[0] * self.value_for(getting_move_for) + 
+                    eval_engine[1] * self.mobility_value_for(getting_move_for) +
+                    eval_engine[2] * self.naive_value_for(getting_move_for) + 
+                    eval_engine[3] * self.control_value_for(getting_move_for);
         }
 
         let legal_moves = self.get_legal_moves();
@@ -352,6 +378,7 @@ pub trait Evaluate: Sized {
                     !is_maximizing,
                     getting_move_for,
                     board_count,
+                    Some(eval_engine)
                 );
 
                 if child_board_value > best_move_value {
@@ -377,6 +404,7 @@ pub trait Evaluate: Sized {
                     !is_maximizing,
                     getting_move_for,
                     board_count,
+                    Some(eval_engine)
                 );
                 if child_board_value < best_move_value {
                     best_move_value = child_board_value;

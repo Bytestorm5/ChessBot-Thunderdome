@@ -37,11 +37,11 @@ const SQUARE_SIZE: u16 = 60;
 pub const AI_DEPTH: i32 = 2;
 
 pub fn best_move(board: &Board) -> Move {
-    board.get_best_next_move(AI_DEPTH).0
+    board.get_best_next_move(AI_DEPTH, None).0
 }
 
 pub fn worst_move(board: &Board) -> Move {
-    board.get_worst_next_move(AI_DEPTH).0
+    board.get_worst_next_move(AI_DEPTH, None).0
 }
 
 pub fn random_move(board: &Board) -> Move {
