@@ -289,6 +289,19 @@ impl Piece {
 
     /// Get the color of a given piece.
     #[inline]
+    pub fn flip_color(&self) -> Self {
+        match *self {
+            Self::King(_, pos) => Self::King(self.get_color().invert(), pos),
+            Self::Queen(_, pos) => Self::Queen(self.get_color().invert(), pos),
+            Self::Rook(_, pos) => Self::Rook(self.get_color().invert(), pos),
+            Self::Bishop(_, pos) => Self::Bishop(self.get_color().invert(), pos),
+            Self::Knight(_, pos) => Self::Knight(self.get_color().invert(), pos),
+            Self::Pawn(_, pos) => Self::Pawn(self.get_color().invert(), pos),
+        }
+    }
+
+    /// Get the color of a given piece.
+    #[inline]
     pub fn get_color(&self) -> Color {
         match self {
             Self::King(c, _)

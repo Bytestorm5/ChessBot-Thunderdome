@@ -638,12 +638,11 @@ impl Board {
                 continue;
             }
 
-            if let Some(piece) = square.get_piece() {
-                if piece.get_color() == ally_color {
+            if let Some(piece) = square.get_piece() {             
+                if piece.get_color() == ally_color && piece.flip_color().is_legal_attack(pos, self) {
                     control += 1;
                 }
-
-                if piece.is_legal_attack(pos, self) {
+                else if piece.is_legal_attack(pos, self) {
                     control -= 1;
                 }
             }
