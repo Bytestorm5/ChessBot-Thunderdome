@@ -8,6 +8,9 @@ use alloc::{
 
 use core::convert::TryFrom;
 
+extern crate std;
+use std::{collections::HashMap, print, println};
+
 mod board;
 pub use board::{Board, BoardBuilder};
 
@@ -260,6 +263,9 @@ pub trait Evaluate: Sized {
     /// Apply a move to the board for evaluation.
     fn apply_eval_move(&self, m: Move) -> Self;
 
+    //Create a concise string representation of the board for caching
+    fn cache_repr(&self) -> String;
+
     /// Get the best move for the current player with `depth` number of moves
     /// of lookahead.
     ///
@@ -278,6 +284,8 @@ pub trait Evaluate: Sized {
         let color = self.get_current_player_color();
 
         let mut board_count = 0;
+        let mut board_cache = HashMap::new();
+        board_cache.insert("".to_string(), 0.0);
         for m in &legal_moves {
             let child_board_value = self.apply_eval_move(*m).minimax(
                 depth,
@@ -286,7 +294,8 @@ pub trait Evaluate: Sized {
                 false,
                 color,
                 &mut board_count,
-                engine
+                engine,
+                &mut board_cache
             );
             if child_board_value >= best_move_value {
                 best_move = *m;
@@ -315,6 +324,8 @@ pub trait Evaluate: Sized {
         let color = self.get_current_player_color();
 
         let mut board_count = 0;
+        let mut board_cache = HashMap::new();
+        board_cache.insert("".to_string(), 0.0);
         for m in &legal_moves {
             let child_board_value = self.apply_eval_move(*m).minimax(
                 depth,
@@ -323,15 +334,21 @@ pub trait Evaluate: Sized {
                 true,
                 !color,
                 &mut board_count,
-                engine
+                engine,
+                &mut board_cache,
             );
 
             if child_board_value >= best_move_value {
                 best_move = *m;
                 best_move_value = child_board_value;
             }
+        }        
+        if board_cache.len() > 1 {
+            println!("Positions saved!")
         }
-
+        else {
+            println!("Positions local only.")
+        }
         (best_move, board_count, best_move_value)
     }
 
@@ -351,6 +368,7 @@ pub trait Evaluate: Sized {
         getting_move_for: Color,
         board_count: &mut u64,
         engine: Option<[f64; 4]>,
+        mut cache: &mut HashMap<String, f64>,
     ) -> f64 {
         *board_count += 1;
         let eval_engine = match engine {
@@ -360,19 +378,19 @@ pub trait Evaluate: Sized {
         if depth == 0 {
             let mut eval = 0.0;
 
-            if (eval_engine[0] != 0.0) {
+            if eval_engine[0] != 0.0 {
                 eval += self.value_for(getting_move_for) * eval_engine[0]
             }
-            if (eval_engine[1] != 0.0) {
+            if eval_engine[1] != 0.0 {
                 eval += self.mobility_value_for(getting_move_for) * eval_engine[1]
             }
-            if (eval_engine[2] != 0.0) {
+            if eval_engine[2] != 0.0 {
                 eval += self.naive_value_for(getting_move_for) * eval_engine[2]
             }
-            if (eval_engine[3] != 0.0) {
+            if eval_engine[3] != 0.0 {
                 eval += self.control_value_for(getting_move_for) * eval_engine[3]
             }
-
+            cache.insert(self.cache_repr(), eval);
             return eval
         }
 
@@ -383,16 +401,23 @@ pub trait Evaluate: Sized {
             best_move_value = -999999.0;
 
             for m in &legal_moves {
-                let child_board_value = self.apply_eval_move(*m).minimax(
-                    depth - 1,
-                    alpha,
-                    beta,
-                    !is_maximizing,
-                    getting_move_for,
-                    board_count,
-                    Some(eval_engine)
-                );
-
+                let child_board_value;
+                let repr = self.cache_repr();
+                if cache.contains_key(&repr) {
+                    child_board_value = cache[&repr]
+                }
+                else {
+                    child_board_value = self.apply_eval_move(*m).minimax(
+                        depth - 1,
+                        alpha,
+                        beta,
+                        !is_maximizing,
+                        getting_move_for,
+                        board_count,
+                        Some(eval_engine),
+                        &mut cache
+                    );
+                }
                 if child_board_value > best_move_value {
                     best_move_value = child_board_value;
                 }
@@ -409,15 +434,23 @@ pub trait Evaluate: Sized {
             best_move_value = 999999.0;
 
             for m in &legal_moves {
-                let child_board_value = self.apply_eval_move(*m).minimax(
-                    depth - 1,
-                    alpha,
-                    beta,
-                    !is_maximizing,
-                    getting_move_for,
-                    board_count,
-                    Some(eval_engine)
-                );
+                let child_board_value;
+                let repr = self.cache_repr();
+                if cache.contains_key(&repr) {
+                    child_board_value = cache[&repr]
+                }
+                else {
+                    child_board_value = self.apply_eval_move(*m).minimax(
+                        depth - 1,
+                        alpha,
+                        beta,
+                        !is_maximizing,
+                        getting_move_for,
+                        board_count,
+                        Some(eval_engine),
+                        &mut cache
+                    );
+                }
                 if child_board_value < best_move_value {
                     best_move_value = child_board_value;
                 }

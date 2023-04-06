@@ -206,7 +206,6 @@ pub struct Board {
 
     turn: Color,
 }
-
 impl Evaluate for Board {
     #[inline]
     fn value_for(&self, ally_color: Color) -> f64 {
@@ -293,6 +292,31 @@ impl Evaluate for Board {
         }
 
         result
+    }
+    fn cache_repr(&self) -> String {
+        let mut repr: String = "".to_string();
+        for square in &self.squares {
+            if let Some(piece) = square.get_piece() {   
+                let name = piece.get_name();             
+                let mut c = match name {
+                    "king" => "k",
+                    "queen" => "q",
+                    "rook" => "r",
+                    "bishop" => "b",
+                    "knight" => "n",
+                    "pawn" => "p",
+                    _ => "_"
+                }.to_string();
+                if piece.get_color() == Color::White {
+                    c = c.to_uppercase();
+                }
+                repr += &c;
+            }
+            else {
+                repr += "-";
+            }
+        }
+        return repr.to_string()
     }
 }
 
