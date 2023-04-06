@@ -226,7 +226,7 @@ impl Evaluate for Board {
 
     #[inline]
     fn mobility_value_for(&self, ally_color: Color) -> f64 {
-        (self.get_legal_moves_for(ally_color).len() as f64) - (self.get_legal_moves_for(ally_color.invert()).len() as f64)
+        (self.get_legal_moves_for(ally_color).len() as f64) - (self.get_legal_moves_for(ally_color.invert()).len() as f64) * 2.5
     }
 
     #[inline]
@@ -236,9 +236,9 @@ impl Evaluate for Board {
             .map(|square| match square.get_piece() {
                 Some(piece) => {
                     if piece.get_color() == ally_color {
-                        1.0
+                        2.5
                     } else {
-                        -1.0
+                        -2.5
                     }
                 }
                 None => 0.0,
@@ -254,7 +254,7 @@ impl Evaluate for Board {
             let square_pos = Position::new(row as i32, col as i32);
             control += self.control_level(square_pos, ally_color)
         }
-        control as f64
+        2.5 * (control as f64)
     }
 
     #[inline]

@@ -342,13 +342,8 @@ pub trait Evaluate: Sized {
                 best_move = *m;
                 best_move_value = child_board_value;
             }
-        }        
-        if board_cache.len() > 1 {
-            println!("Positions saved!")
-        }
-        else {
-            println!("Positions local only.")
-        }
+        }       
+        
         (best_move, board_count, best_move_value)
     }
 
@@ -404,7 +399,7 @@ pub trait Evaluate: Sized {
                 let child_board_value;
                 let repr = self.cache_repr();
                 if cache.contains_key(&repr) {
-                    child_board_value = cache[&repr]
+                    child_board_value = cache[&repr];
                 }
                 else {
                     child_board_value = self.apply_eval_move(*m).minimax(
