@@ -3,7 +3,7 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use core::cmp::Ordering;
+use core::{cmp::Ordering, ptr::null};
 
 pub struct BoardBuilder {
     board: Board,
@@ -255,6 +255,52 @@ impl Evaluate for Board {
             control += self.control_level(square_pos, ally_color)
         }
         2.5 * (control as f64)
+    }
+    #[inline]
+    fn closest_value_for(&self, ally_color: Color) -> f64 {
+        let mut min_dist = 0.0;
+        let mut king: Position = Position::new(0, 5);
+        for (i, square) in self.squares.iter().enumerate() {
+            let row = 7 - i / 8;
+            let col = i % 8;
+            let square_pos = Position::new(row as i32, col as i32);
+
+            if let Some(piece) = square.get_piece() {             
+                if piece.get_color() == ally_color && piece.is_king() {
+                    king = square_pos;
+                }
+            }
+        }
+        for (i, square) in self.squares.iter().enumerate() {
+            let row = 7 - i / 8;
+            let col = i % 8;
+            let square_pos = Position::new(row as i32, col as i32);
+
+            if let Some(piece) = square.get_piece() {             
+                if piece.get_color() != ally_color {
+                    let mut dist = ((king.get_row() - square_pos.get_row()).pow(2) + (king.get_col() - square_pos.get_col()).pow(2)) as f64;
+                    dist = dist.sqrt();
+                    if min_dist > dist {
+                        min_dist = dist;
+                    }                    
+                }
+            }
+        }
+        min_dist
+    }
+
+    #[inline]
+    fn trade_value_for(&self, ally_color: Color) -> f64 {
+        let material: f64 = self.squares
+                        .iter()
+                        .map(|square| match square.get_piece() {
+                            Some(piece) => {
+                                piece.get_weighted_value()
+                            }
+                            None => 0.0,
+                        })
+                        .sum();
+        return -material - (2.0 * self.value_for(ally_color).abs())
     }
 
     #[inline]

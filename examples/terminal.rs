@@ -17,9 +17,9 @@ fn input(prompt: impl std::fmt::Display) -> String {
 
 fn get_cpu_move(b: &Board, best: bool) -> Move {
     let (m, count, _) = if best {
-        b.get_best_next_move(3, Some([1.0, 1.0, 1.0, 1.0]))
+        b.get_best_next_move(3, Some([1.0, 0.0, 0.0, 0.0]))
     } else {
-        b.get_worst_next_move(3, Some([1.0, 1.0, 1.0, 1.0]))
+        b.get_worst_next_move(3, Some([1.0, 0.0, 0.0, 0.0]))
     };
 
     print!("CPU evaluated {} moves before choosing to ", count);

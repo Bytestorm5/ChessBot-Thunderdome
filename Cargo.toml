@@ -26,3 +26,7 @@ name = "chess"
 
 [[example]]
 name = "terminal"
+
+[dependencies]
+rayon = "1.5.1"
+dashmap = "5.4.0"
