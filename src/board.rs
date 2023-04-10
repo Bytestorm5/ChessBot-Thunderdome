@@ -205,6 +205,7 @@ pub struct Board {
     black_castling_rights: CastlingRights,
 
     turn: Color,
+    halfmoves: u8,
 }
 impl Evaluate for Board {
     #[inline]
@@ -461,41 +462,12 @@ impl Board {
             black_castling_rights: CastlingRights::default(),
 
             turn: WHITE,
+            halfmoves: 0,
         }
     }
 
-    pub fn fen(&self, moves: i32) -> String {
-        let mut control = "".to_string();
-        let mut blanks = 0;
-        for (i, square) in self.squares.iter().enumerate() {
-            let row = 7 - i / 8;
-            let col = i % 8;
-            if col == 0 && row != 7 {
-                //Line ending
-                if blanks > 0 {
-                    control = format!("{control}{blanks}");
-                    blanks = 0;
-                }
-                control = format!("{control}/")
-            }
-            if square.is_empty() {
-                blanks += 1;
-            }
-            else {
-                let p = square.get_piece().unwrap().get_char();
-                if blanks > 0 {
-                    control = format!("{control}{blanks}{p}");
-                }
-                else {
-                    control = format!("{control}{p}");
-                }
-                blanks = 0;
-
-            }
-        }
-        let fullmoves = moves / 2;
-        control = format!("{control} - - - {moves} {fullmoves}");
-        control
+    pub fn fen(&self) -> String {
+        format_fen(self, self.halfmoves, self.halfmoves / 2).unwrap()
     }
 
     pub fn rating_bar(&self, len: usize) -> String {
@@ -618,7 +590,7 @@ impl Board {
     pub fn get_piece(&self, pos: Position) -> Option<Piece> {
         if pos.is_off_board() {
             return None;
-        }
+        }        
         self.squares[((7 - pos.get_row()) * 8 + pos.get_col()) as usize].get_piece()
     }
 
@@ -940,8 +912,8 @@ impl Board {
     /// Is the current player in stalemate?
     pub fn is_stalemate(&self) -> bool {
         (self.get_legal_moves().is_empty() && !self.is_in_check(self.get_current_player_color()))
-            || (self.has_insufficient_material(self.turn)
-                && self.has_insufficient_material(!self.turn))
+            || (self.has_insufficient_material(self.turn) && self.has_insufficient_material(!self.turn))
+            || (self.halfmoves > 100)
     }
 
     /// Is the current player in checkmate?
@@ -956,7 +928,7 @@ impl Board {
         self
     }
 
-    fn apply_move(&self, m: Move) -> Self {
+    fn apply_move(&self, m: Move) -> Self {        
         match m {
             Move::KingSideCastle => {
                 if let Some(king_pos) = self.get_king_pos(self.turn) {
@@ -964,8 +936,10 @@ impl Board {
                         WHITE => Position::new(0, 7),
                         BLACK => Position::new(7, 7),
                     };
-                    self.move_piece(king_pos, rook_pos.next_left(), None)
-                        .move_piece(rook_pos, king_pos.next_right(), None)
+                    let mut result = self.move_piece(king_pos, rook_pos.next_left(), None)
+                        .move_piece(rook_pos, king_pos.next_right(), None);
+                    result.halfmoves += 1;
+                    result
                 } else {
                     *self
                 }
@@ -976,8 +950,10 @@ impl Board {
                         WHITE => Position::new(0, 0),
                         BLACK => Position::new(7, 0),
                     };
-                    self.move_piece(king_pos, king_pos.next_left().next_left(), None)
-                        .move_piece(rook_pos, king_pos.next_left(), None)
+                    let mut result = self.move_piece(king_pos, king_pos.next_left().next_left(), None)
+                        .move_piece(rook_pos, king_pos.next_left(), None);
+                    result.halfmoves += 1;
+                    result
                 } else {
                     *self
                 }
@@ -985,6 +961,14 @@ impl Board {
 
             Move::Piece(from, to) => {
                 let mut result = self.move_piece(from, to, None);
+                result.halfmoves += 1;
+                if self.get_piece(from).unwrap().get_name() == "pawn" {
+                    //Pawn Move
+                    result.halfmoves = 0;
+                }
+                if self.has_piece(to) {
+                    result.halfmoves = 0;
+                }
 
                 if let (Some(en_passant), Some(Piece::Pawn(player_color, _))) =
                     (self.en_passant, self.get_piece(from))
@@ -1001,7 +985,11 @@ impl Board {
 
                 result
             }
-            Move::Promotion(from, to, promotion) => self.move_piece(from, to, Some(promotion)),
+            Move::Promotion(from, to, promotion) => {
+                let mut result = self.move_piece(from, to, Some(promotion));
+                result.halfmoves += 1;
+                result
+            },
             Move::Resign => self.remove_all(self.turn).queen_all(!self.turn),
         }
     }

@@ -122,7 +122,7 @@ async fn main() -> Result<(), String> {
             match b.play_move(m) {
                 GameResult::Continuing(next_board) => {
                     b = next_board;
-                    println!("{}", b.fen(halfmoves));
+                    println!("{}", b.fen());
 
                 }
 

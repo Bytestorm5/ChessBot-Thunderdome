@@ -124,7 +124,6 @@ async fn main() -> Result<(), String> {
         }
 
         let mut b = Board::default();
-        let mut halfmoves = 0;
 
         let pipeline = vec![
                 doc! {
@@ -149,13 +148,12 @@ async fn main() -> Result<(), String> {
         max_id += 1;
 
         loop {
-            let m = get_cpu_move(&b, Some(w_engine), Some(b_engine));
-            halfmoves += 1;            
+            let m = get_cpu_move(&b, Some(w_engine), Some(b_engine));          
 
             match b.play_move(m) {
                 GameResult::Continuing(next_board) => {
                     b = next_board;
-                    println!("{}", b.fen(halfmoves));
+                    println!("{}", b.fen());
 
                     let next_move: String;
                     if b.get_turn_color() == Color::White {
@@ -170,7 +168,7 @@ async fn main() -> Result<(), String> {
                         "black_engine": engine_str(b_engine),
                         "white_engine": engine_str(w_engine),
                         "status": next_move,
-                        "board": b.fen(halfmoves),
+                        "board": b.fen(),
                     };
 
                     let filter = doc! {"_id": max_id};
@@ -188,7 +186,7 @@ async fn main() -> Result<(), String> {
                         "black_engine": engine_str(b_engine),
                         "white_engine": engine_str(w_engine),
                         "status": winner.to_string(),
-                        "board": b.fen(halfmoves),
+                        "board": b.fen(),
                     };
 
                     let filter = doc! {"_id": max_id};
@@ -211,7 +209,7 @@ async fn main() -> Result<(), String> {
                         "black_engine": engine_str(b_engine),
                         "white_engine": engine_str(w_engine),
                         "status": "Draw".to_string(),
-                        "board": b.fen(halfmoves),
+                        "board": b.fen(),
                     };
 
                     let filter = doc! {"_id": max_id};

@@ -295,7 +295,7 @@ pub trait Evaluate: Sized where Self: Sync {
 
         let arc_engine = Arc::new(engine);
         
-        let (best_move, best_move_value) = legal_moves
+        let (best_move, best_move_value): (&Move, f64) = legal_moves
         .par_iter()        
         .map(|mov| {
             let e = Arc::clone(&arc_engine);
