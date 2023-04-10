@@ -33,7 +33,7 @@ lazy_static! {
 }
 
 const SQUARE_SIZE: u16 = 48;
-pub const AI_DEPTH: i32 = if cfg!(debug_assertions) {2} else {4};
+pub const AI_DEPTH: i32 = 5; //if cfg!(debug_assertions) {2} else {4};
 
 pub fn get_symbol(piece: &Piece) -> impl ToString {
 	match piece {
@@ -47,7 +47,7 @@ pub fn get_symbol(piece: &Piece) -> impl ToString {
 }
 
 pub fn best_move(board: &Board) -> Move {
-    board.get_best_next_move(AI_DEPTH, None).0
+    board.get_best_next_move(AI_DEPTH, Some([0.0, 0.0, 1.0, 0.0, 0.0, 0.0])).0
 }
 
 pub fn worst_move(board: &Board) -> Move {

@@ -213,6 +213,22 @@ impl Piece {
         }
     }
 
+    #[inline]
+    pub fn get_char(&self) -> String {
+        let c = match self {
+            Self::King(_, _) => "k",
+            Self::Queen(_, _) => "q",
+            Self::Rook(_, _) => "r",
+            Self::Bishop(_, _) => "b",
+            Self::Knight(_, _) => "n",
+            Self::Pawn(_, _) => "p",
+        };
+        match self.get_color()  {
+            Color::White => c.to_uppercase(),
+            Color::Black => c.to_lowercase(),
+        }
+    }
+
     /// Get the material value for a piece.
     /// | Name | Value |
     /// |-|-|

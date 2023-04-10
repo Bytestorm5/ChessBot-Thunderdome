@@ -3,7 +3,7 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use core::{cmp::Ordering, ptr::null};
+use core::{cmp::Ordering};
 
 pub struct BoardBuilder {
     board: Board,
@@ -226,7 +226,18 @@ impl Evaluate for Board {
 
     #[inline]
     fn mobility_value_for(&self, ally_color: Color) -> f64 {
-        (self.get_legal_moves_for(ally_color).len() as f64) - (self.get_legal_moves_for(ally_color.invert()).len() as f64) * 2.5
+        let mut result = 0.0;
+        for square in &self.squares {
+            if let Some(piece) = square.get_piece() {
+                if piece.get_color() == ally_color {
+                    result += 1.0;
+                }
+                else {
+                    result -= 1.0;
+                }
+            }
+        }
+        result
     }
 
     #[inline]
@@ -236,9 +247,9 @@ impl Evaluate for Board {
             .map(|square| match square.get_piece() {
                 Some(piece) => {
                     if piece.get_color() == ally_color {
-                        2.5
+                        1.0
                     } else {
-                        -2.5
+                        -1.0
                     }
                 }
                 None => 0.0,
@@ -259,26 +270,12 @@ impl Evaluate for Board {
     #[inline]
     fn closest_value_for(&self, ally_color: Color) -> f64 {
         let mut min_dist = 0.0;
-        let mut king: Position = Position::new(0, 5);
-        for (i, square) in self.squares.iter().enumerate() {
-            let row = 7 - i / 8;
-            let col = i % 8;
-            let square_pos = Position::new(row as i32, col as i32);
-
-            if let Some(piece) = square.get_piece() {             
-                if piece.get_color() == ally_color && piece.is_king() {
-                    king = square_pos;
-                }
-            }
-        }
-        for (i, square) in self.squares.iter().enumerate() {
-            let row = 7 - i / 8;
-            let col = i % 8;
-            let square_pos = Position::new(row as i32, col as i32);
-
+        let king: Position = self.get_king_pos(ally_color).unwrap();
+        for (_, square) in self.squares.iter().enumerate() {
             if let Some(piece) = square.get_piece() {             
                 if piece.get_color() != ally_color {
-                    let mut dist = ((king.get_row() - square_pos.get_row()).pow(2) + (king.get_col() - square_pos.get_col()).pow(2)) as f64;
+                    let pos = piece.get_pos();
+                    let mut dist = ((king.get_row() - pos.get_row()).pow(2) + (king.get_col() - pos.get_col()).pow(2)) as f64;
                     dist = dist.sqrt();
                     if min_dist > dist {
                         min_dist = dist;
@@ -295,12 +292,12 @@ impl Evaluate for Board {
                         .iter()
                         .map(|square| match square.get_piece() {
                             Some(piece) => {
-                                piece.get_weighted_value()
+                                0.5*piece.get_weighted_value()
                             }
                             None => 0.0,
                         })
                         .sum();
-        return -material - (2.0 * self.value_for(ally_color).abs())
+        return -(material + self.value_for(ally_color).abs())
     }
 
     #[inline]
@@ -465,6 +462,34 @@ impl Board {
 
             turn: WHITE,
         }
+    }
+
+    pub fn fen(&self, moves: i32) -> String {
+        let mut control = "".to_string();
+        let mut blanks = 0;
+        for (i, square) in self.squares.iter().enumerate() {
+            let row = 7 - i / 8;
+            let col = i % 8;
+            if col == 0 && row != 7 {
+                //Line ending
+                if blanks > 0 {
+                    control = format!("{control}{blanks}")
+                }
+                control = format!("{control}/")
+            }
+            if square.is_empty() {
+                blanks += 1;
+            }
+            else {
+                let p = square.get_piece().unwrap().get_char();
+                control = format!("{control}{blanks}{p}");
+                blanks = 0;
+
+            }
+        }
+        let fullmoves = moves / 2;
+        control = format!("{control} - - - {moves} {fullmoves}");
+        control
     }
 
     pub fn rating_bar(&self, len: usize) -> String {

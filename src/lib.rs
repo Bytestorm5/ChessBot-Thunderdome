@@ -6,10 +6,9 @@ use alloc::{
     vec::Vec,
 };
 
-use core::{convert::TryFrom, fmt::Debug};
+use core::{convert::TryFrom, fmt::Debug, cmp::Ordering};
 
 extern crate std;
-use std::collections::HashMap;
 
 mod board;
 pub use board::{Board, BoardBuilder};
@@ -258,6 +257,7 @@ pub trait Evaluate: Sized where Self: Sync {
     /// Get the value of the board based on the minimum distance of an enemy from the king
     fn closest_value_for(&self, color: Color) -> f64;
 
+    /// Get the value of the board, minimizing the amount of material on the board
     fn trade_value_for(&self, color: Color) -> f64;
 
     /// Get the current player's color.
@@ -285,7 +285,7 @@ pub trait Evaluate: Sized where Self: Sync {
     ///
     /// It's best not to use the rating value by itself for anything, as it
     /// is relative to the other player's move ratings as well.
-    fn get_best_next_move(&self, depth: i32, engine: Option<[f64; 4]>) -> (Move, u64, f64) {
+    fn get_best_next_move(&self, depth: i32, engine: Option<[f64; 6]>) -> (Move, u64, f64) {
         let legal_moves = self.get_legal_moves();        
 
         let color = self.get_current_player_color();
@@ -302,8 +302,7 @@ pub trait Evaluate: Sized where Self: Sync {
             let c = Arc::clone(&board_cache);
             let b = self.clone();
             let bc = Arc::clone(&board_count);
-            b.apply_eval_move(*mov);
-            let value = b.minimax(
+            let value = b.apply_eval_move(*mov).minimax(
                 depth,
                 -1000000.0,
                 1000000.0,
@@ -313,31 +312,13 @@ pub trait Evaluate: Sized where Self: Sync {
                 *e,
                 &mut c.lock().unwrap(),
             );
+            //println!("Move {}: {}", mov.to_string(), value.to_string());
             (mov, value)
         })
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-        .map(|(mov, value)| (*mov, value))
+        .max_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap_or(Ordering::Equal))
         .unwrap();
-
-
-        // for m in &legal_moves {
-        //     let child_board_value = self.apply_eval_move(*m).minimax(
-        //         depth,
-        //         -1000000.0,
-        //         1000000.0,
-        //         false,
-        //         color,
-        //         &mut board_count,
-        //         engine,
-        //         &mut board_cache
-        //     );
-        //     if child_board_value >= best_move_value {
-        //         best_move = *m;
-        //         best_move_value = child_board_value;
-        //     }
-        // }
         let count: u64 = *board_count.lock().unwrap();
-        (best_move, count, best_move_value)
+        (*best_move, count, best_move_value)
     }
 
     /// Get the best move for the current player with `depth` number of moves
@@ -350,36 +331,39 @@ pub trait Evaluate: Sized where Self: Sync {
     ///
     /// It's best not to use the rating value by itself for anything, as it
     /// is relative to the other player's move ratings as well.
-    fn get_worst_next_move(&self, depth: i32, engine: Option<[f64; 4]>) -> (Move, u64, f64) {
-        let legal_moves = self.get_legal_moves();
-        (legal_moves[0], 0, 0.0)
-        // let mut best_move_value = -999999.0;
-        // let mut best_move = Move::Resign;
+    fn get_worst_next_move(&self, depth: i32, engine: Option<[f64; 6]>) -> (Move, u64, f64) {
+        let legal_moves = self.get_legal_moves();        
 
-        // let color = self.get_current_player_color();
+        let color = self.get_current_player_color();
 
-        // let mut board_count = 0;
-        // let mut board_cache = HashMap::new();
-        // board_cache.insert("".to_string(), 0.0);
-        // for m in &legal_moves {
-        //     let child_board_value = self.apply_eval_move(*m).minimax(
-        //         depth,
-        //         -1000000.0,
-        //         1000000.0,
-        //         true,
-        //         !color,
-        //         &mut board_count,
-        //         engine,
-        //         &mut board_cache,
-        //     );
+        let board_count = Arc::new(Mutex::new(0));
+        let board_cache: Arc<Mutex<DashMap<String, f64>>> = Arc::new(Mutex::new(DashMap::new()));
 
-        //     if child_board_value >= best_move_value {
-        //         best_move = *m;
-        //         best_move_value = child_board_value;
-        //     }
-        // }       
+        let arc_engine = Arc::new(engine);
         
-        // (best_move, board_count, best_move_value)
+        let (best_move, best_move_value) = legal_moves
+        .par_iter()        
+        .map(|mov| {
+            let e = Arc::clone(&arc_engine);
+            let c = Arc::clone(&board_cache);
+            let b = self.clone();
+            let bc = Arc::clone(&board_count);
+            let value = b.apply_eval_move(*mov).minimax(
+                depth,
+                -1000000.0,
+                1000000.0,
+                false,
+                color,
+                &mut bc.lock().unwrap(),
+                *e,
+                &mut c.lock().unwrap(),
+            );
+            (mov, value)
+        })
+        .max_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap_or(Ordering::Equal))
+        .unwrap();
+        let count: u64 = *board_count.lock().unwrap();
+        (*best_move, count, best_move_value)
     }
 
     /// Perform minimax on a certain position, and get the minimum or maximum value
@@ -397,12 +381,12 @@ pub trait Evaluate: Sized where Self: Sync {
         is_maximizing: bool,
         getting_move_for: Color,
         board_count: &mut u64,
-        engine: Option<[f64; 4]>,
+        engine: Option<[f64; 6]>,
         mut cache: &mut DashMap<String, f64>,
     ) -> f64 {        
         let eval_engine = match engine {
             Some(a) => a,
-            None => [1.0, 0.0, 0.0, 0.0],
+            None => [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         };
         if depth == 0 {
             *board_count += 1;
@@ -419,6 +403,12 @@ pub trait Evaluate: Sized where Self: Sync {
             }
             if eval_engine[3] != 0.0 {
                 eval += self.control_value_for(getting_move_for) * eval_engine[3]
+            }
+            if eval_engine[4] != 0.0 {
+                eval += self.closest_value_for(getting_move_for) * eval_engine[4]
+            }
+            if eval_engine[5] != 0.0 {
+                eval += self.trade_value_for(getting_move_for) * eval_engine[5]
             }
             cache.insert(self.cache_repr(), eval);
             return eval
