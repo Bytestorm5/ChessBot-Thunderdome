@@ -24,8 +24,9 @@ categories = [
 path = "src/bin.rs"
 name = "chess"
 
-[[example]]
-name = "terminal"
+[[bin]]
+path = "thunderdome.rs"
+name = "thunderdome"
 
 [dependencies]
 rayon = "1.5.1"
@@ -33,6 +34,6 @@ dashmap = "5.4.0"
 dotenv = "0.15.0"
 mongodb = { version = "2.4.0", default-features = false, features = ["tokio-sync"] }
 rand = "0.8.4"
-tokio = "1.27.0"
+tokio = { version = "1.27.0", features = ["full"] }
 futures = "0.3.28"
 serde = "1.0.159"

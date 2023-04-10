@@ -473,7 +473,8 @@ impl Board {
             if col == 0 && row != 7 {
                 //Line ending
                 if blanks > 0 {
-                    control = format!("{control}{blanks}")
+                    control = format!("{control}{blanks}");
+                    blanks = 0;
                 }
                 control = format!("{control}/")
             }
@@ -482,7 +483,12 @@ impl Board {
             }
             else {
                 let p = square.get_piece().unwrap().get_char();
-                control = format!("{control}{blanks}{p}");
+                if blanks > 0 {
+                    control = format!("{control}{blanks}{p}");
+                }
+                else {
+                    control = format!("{control}{p}");
+                }
                 blanks = 0;
 
             }
