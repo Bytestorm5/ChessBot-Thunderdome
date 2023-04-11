@@ -3,6 +3,8 @@ use chess_engine::*;
 use std::{
     convert::TryFrom,
     io::{stdin, stdout, Write}, future::Future,
+    thread,
+    time,
 };
 use mongodb::{bson::{doc, Document, document, Bson}, Client, Collection, Cursor, options::{ClientOptions, ServerApiVersion, ServerApi, UpdateOptions}};
 use futures::stream::{StreamExt, TryStreamExt};
@@ -73,6 +75,30 @@ fn engine_str(engine_arr: [f64;6]) -> String {
     result
 }
     
+fn calculate_elo(player1_elo: f64, player2_elo: f64, result: GameResult) -> (f64, f64) {
+    // Constants for the ELO system
+    const K_FACTOR: f64 = 32.0;
+    const ELO_DIFFERENCE_LIMIT: f64 = 400.0;
+    const WIN_PROBABILITY_CONSTANT: f64 = 10.0;
+
+    // Calculate the expected win probability for player 1
+    let elo_difference = (player2_elo - player1_elo) / ELO_DIFFERENCE_LIMIT;
+    let expected_win_probability = 1.0 / (1.0 + WIN_PROBABILITY_CONSTANT.powf(elo_difference));
+
+    // Calculate the actual result
+    let actual_result = match result {
+        GameResult::Stalemate => 0.5,
+        GameResult::Victory(_) => 1.0,
+        GameResult::Continuing(_) => {return (player1_elo, player2_elo)},
+        GameResult::IllegalMove(_) => {return (player1_elo, player2_elo)},
+    };
+
+    // Calculate the new ELO ratings for both players
+    let player1_new_elo = player1_elo + K_FACTOR * (actual_result - expected_win_probability);
+    let player2_new_elo = player2_elo + K_FACTOR * (expected_win_probability - actual_result);
+
+    (player1_new_elo, player2_new_elo)
+}
 
 #[tokio::main]
 async fn main() -> Result<(), String> {    
@@ -191,8 +217,40 @@ async fn main() -> Result<(), String> {
 
                     let filter = doc! {"_id": max_id};
                     let options = UpdateOptions::builder().upsert(true).build();
-                    let update = doc! {"$set": Bson::from(&game_state)};
+                    let mut update = doc! {"$set": Bson::from(&game_state)};
                     game_col.update_one(filter,update,options).await.ok().unwrap();
+
+                    let black_engine_bson = engine_col.find_one(doc! {"engine":engine_str(b_engine)}, None).await.ok().unwrap().unwrap();
+                    let white_engine_bson = engine_col.find_one(doc! {"engine":engine_str(w_engine)}, None).await.ok().unwrap().unwrap();
+
+                    let elos: (f64, f64) = if winner == Color::White {
+                        calculate_elo(white_engine_bson.get_i32("elo").unwrap() as f64, black_engine_bson.get_i32("elo").unwrap() as f64, GameResult::Victory(winner))
+                    } else {
+                        let t = calculate_elo(black_engine_bson.get_f64("elo").unwrap(), white_engine_bson.get_f64("elo").unwrap(), GameResult::Victory(winner));
+                        (t.1, t.0)
+                    };                    
+
+                    update = doc! {
+                        "$set": Bson::from(doc! {
+                            "elo":elos.0,
+                        }),
+                        "$inc": Bson::from(doc! {
+                            "wins": if winner == Color::White { 1 } else { 0 },
+                            "losses": if winner == Color::White { 0 } else { 1 }  
+                        })
+                    };                    
+                    engine_col.update_one(doc! {"engine":engine_str(w_engine)}, update, None).await.ok().unwrap();
+
+                    update = doc! {
+                        "$set": Bson::from(doc! {
+                            "elo":elos.1,
+                        }),
+                        "$inc": Bson::from(doc! {
+                            "wins": if winner == Color::Black { 1 } else { 0 },
+                            "losses": if winner == Color::Black { 0 } else { 1 }  
+                        })
+                    };                    
+                    engine_col.update_one(doc! {"engine":engine_str(b_engine)}, update, None).await.ok().unwrap();
 
                     break;
                 }
@@ -214,12 +272,37 @@ async fn main() -> Result<(), String> {
 
                     let filter = doc! {"_id": max_id};
                     let options = UpdateOptions::builder().upsert(true).build();
-                    let update = doc! {"$set": Bson::from(&game_state)};
+                    let mut update = doc! {"$set": Bson::from(&game_state)};
                     game_col.update_one(filter,update,options).await.ok().unwrap();
+
+                    let black_engine_bson = engine_col.find_one(doc! {"engine":engine_str(b_engine)}, None).await.ok().unwrap().unwrap();
+                    let white_engine_bson = engine_col.find_one(doc! {"engine":engine_str(w_engine)}, None).await.ok().unwrap().unwrap();
+
+                    let elos: (f64, f64) = calculate_elo(white_engine_bson.get_f64("elo").unwrap(), black_engine_bson.get_f64("elo").unwrap(), GameResult::Stalemate);
+                    update = doc! {
+                        "$set": Bson::from(doc! {
+                            "elo":elos.0,
+                        }),
+                        "$inc": Bson::from(doc! {
+                            "draws": 1 
+                        })
+                    };                    
+                    engine_col.update_one(doc! {"engine":engine_str(w_engine)}, update, None).await.ok().unwrap();
+
+                    update = doc! {
+                        "$set": Bson::from(doc! {
+                            "elo":elos.1,
+                        }),
+                        "$inc": Bson::from(doc! {
+                            "draws": 1 
+                        })
+                    };                    
+                    engine_col.update_one(doc! {"engine":engine_str(b_engine)}, update, None).await.ok().unwrap();
 
                     break;
                 }
             }
+            thread::sleep(time::Duration::from_millis(1500))
         }
     }
     Ok(())

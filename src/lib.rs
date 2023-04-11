@@ -294,7 +294,7 @@ pub trait Evaluate: Sized where Self: Sync {
         let board_cache: Arc<Mutex<DashMap<String, f64>>> = Arc::new(Mutex::new(DashMap::new()));
 
         let arc_engine = Arc::new(engine);
-        
+
         let (best_move, best_move_value): (&Move, f64) = legal_moves
         .par_iter()        
         .map(|mov| {
@@ -316,7 +316,14 @@ pub trait Evaluate: Sized where Self: Sync {
             (mov, value)
         })
         .max_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap_or(Ordering::Equal))
-        .unwrap();
+        .unwrap_or(
+    if legal_moves.len() > 0 {
+                (&legal_moves[0], 0.0)
+            }
+            else {
+                (&Move::Resign, 0.0)
+            }
+        );
         let count: u64 = *board_count.lock().unwrap();
         (*best_move, count, best_move_value)
     }
@@ -361,7 +368,14 @@ pub trait Evaluate: Sized where Self: Sync {
             (mov, value)
         })
         .max_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap_or(Ordering::Equal))
-        .unwrap();
+        .unwrap_or(
+    if legal_moves.len() > 0 {
+                (&legal_moves[0], 0.0)
+            }
+            else {
+                (&Move::Resign, 0.0)
+            }
+        );
         let count: u64 = *board_count.lock().unwrap();
         (*best_move, count, best_move_value)
     }

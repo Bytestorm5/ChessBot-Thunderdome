@@ -210,7 +210,7 @@ pub struct Board {
 impl Evaluate for Board {
     #[inline]
     fn value_for(&self, ally_color: Color) -> f64 {
-        self.squares
+        let mut result = self.squares
             .iter()
             .map(|square| match square.get_piece() {
                 Some(piece) => {
@@ -222,7 +222,11 @@ impl Evaluate for Board {
                 }
                 None => 0.0,
             })
-            .sum()
+            .sum();
+        if self.is_checkmate() {
+            result -= 999.0;
+        }
+        result
     }
 
     #[inline]
