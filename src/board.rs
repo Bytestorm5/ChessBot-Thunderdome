@@ -231,23 +231,27 @@ impl Evaluate for Board {
 
     #[inline]
     fn mobility_value_for(&self, ally_color: Color) -> f64 {
-        let mut result = 0.0;
+        let mut ally_moves: Vec<f64> = [].to_vec();
+        let mut enemy_moves: Vec<f64> = [].to_vec();
+        let color = self.get_current_player_color();
         for square in &self.squares {
             if let Some(piece) = square.get_piece() {
                 if piece.get_color() == ally_color {
-                    result += 1.0;
+                    ally_moves.push(piece.get_legal_moves(self).len() as f64)
                 }
                 else {
-                    result -= 1.0;
+                    enemy_moves.push(piece.get_legal_moves(self).len() as f64)
                 }
             }
         }
-        result
+        let ally_avg: f64 = ally_moves.iter().sum::<f64>() / (ally_moves.len() as f64);
+        let enemy_avg: f64 = enemy_moves.iter().sum::<f64>() / (enemy_moves.len() as f64);
+        ally_avg - enemy_avg
     }
 
     #[inline]
     fn naive_value_for(&self, ally_color: Color) -> f64 {
-        self.squares
+        let mut result = self.squares
             .iter()
             .map(|square| match square.get_piece() {
                 Some(piece) => {
@@ -259,18 +263,31 @@ impl Evaluate for Board {
                 }
                 None => 0.0,
             })
-            .sum()
+            .sum();
+            //Naive engine will get excited at any check, rather than mates
+            if self.is_in_check(ally_color) {
+                result -= 999.0;
+            }
+            if self.is_in_check(ally_color.invert()) {
+                result += 999.0;
+            }
+            result
     }
     #[inline]
     fn control_value_for(&self, ally_color: Color) -> f64 {
-        let mut control = 0;
-        for (i, _square) in self.squares.iter().enumerate() {
-            let row = 7 - i / 8;
-            let col = i % 8;
-            let square_pos = Position::new(row as i32, col as i32);
-            control += self.control_level(square_pos, ally_color)
+        let mut result: f64 = 0.0;
+        let color = self.get_current_player_color();
+        for square in &self.squares {
+            if let Some(piece) = square.get_piece() {
+                if piece.get_color() == color {
+                    result += piece.get_legal_moves(self).len() as f64
+                }
+                else {
+                    result -= piece.get_legal_moves(self).len() as f64
+                }
+            }
         }
-        2.5 * (control as f64)
+        result
     }
     #[inline]
     fn closest_value_for(&self, ally_color: Color) -> f64 {
@@ -280,9 +297,8 @@ impl Evaluate for Board {
             if let Some(piece) = square.get_piece() {             
                 if piece.get_color() != ally_color {
                     let pos = piece.get_pos();
-                    let mut dist = ((king.get_row() - pos.get_row()).pow(2) + (king.get_col() - pos.get_col()).pow(2)) as f64;
-                    dist = dist.sqrt();
-                    if min_dist > dist {
+                    let dist = ((king.get_row() - pos.get_row()).abs() + (king.get_col() - pos.get_col()).abs()) as f64;
+                    if min_dist < dist {
                         min_dist = dist;
                     }                    
                 }

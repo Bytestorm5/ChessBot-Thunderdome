@@ -29,8 +29,9 @@ mod util;
 pub use util::*;
 
 use rayon::prelude::*;
-use std::sync::{Arc, Mutex};
+use std::{sync::{Arc, Mutex}, println};
 use dashmap::DashMap;
+use rand::seq::SliceRandom;
 
 pub const WHITE: Color = Color::White;
 pub const BLACK: Color = Color::Black;
@@ -295,7 +296,7 @@ pub trait Evaluate: Sized where Self: Sync {
 
         let arc_engine = Arc::new(engine);
 
-        let (best_move, best_move_value): (&Move, f64) = legal_moves
+        let (best_move, best_move_value): (&Move, f64) = match legal_moves
         .par_iter()        
         .map(|mov| {
             let e = Arc::clone(&arc_engine);
@@ -315,15 +316,27 @@ pub trait Evaluate: Sized where Self: Sync {
             //println!("Move {}: {}", mov.to_string(), value.to_string());
             (mov, value)
         })
-        .max_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap_or(Ordering::Equal))
-        .unwrap_or(
-    if legal_moves.len() > 0 {
-                (&legal_moves[0], 0.0)
+        .max_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap_or(Ordering::Equal)) {
+            Some(v) => v,
+            None => if legal_moves.len() > 0 {
+                println!("Move search failed; Picking random legal move.");
+                (&legal_moves.choose(&mut rand::thread_rng()).unwrap(), 0.0)
             }
             else {
+                println!("Move search failed; Resigning.");
                 (&Move::Resign, 0.0)
             }
-        );
+        };
+        // .unwrap_or(            
+        //     if legal_moves.len() > 0 {
+        //         println!("Move search failed; Picking first move");
+        //         (&legal_moves[0], 0.0)
+        //     }
+        //     else {
+        //         println!("Move search failed; No moves, thus resigning");
+        //         (&Move::Resign, 0.0)
+        //     }
+        // );
         let count: u64 = *board_count.lock().unwrap();
         (*best_move, count, best_move_value)
     }

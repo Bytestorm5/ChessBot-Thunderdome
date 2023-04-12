@@ -1,40 +1,41 @@
 extern crate chess_engine;
 use chess_engine::*;
 use std::{
-    convert::TryFrom,
-    io::{stdin, stdout, Write}, future::Future,
+    io::{stdin, stdout, Write}, 
     thread,
     time,
 };
-use mongodb::{bson::{doc, Document, document, Bson}, Client, Collection, Cursor, options::{ClientOptions, ServerApiVersion, ServerApi, UpdateOptions}};
-use futures::stream::{StreamExt, TryStreamExt};
-use serde::{Deserialize, Serialize};
+use mongodb::{bson::{doc, Document, Bson}, Client, options::{ClientOptions, ServerApiVersion, ServerApi, UpdateOptions}};
+use futures::stream::{TryStreamExt};
 use dotenv::dotenv;
 use std::env;
-
-fn input(prompt: impl std::fmt::Display) -> String {
-    let mut s = String::new();
-    print!("{}", prompt);
-    let _ = stdout().flush();
-    stdin()
-        .read_line(&mut s)
-        .expect("Did not enter a correct string");
-    s
-}
+use std::time::{Duration, Instant};
 
 fn get_cpu_move(b: &Board, w_engine: Option<[f64; 6]>, b_engine: Option<[f64; 6]>) -> Move {
-    let depth = 3;
-    let (m, count, _) = if b.get_turn_color() == Color::White {
+    let mut depth = 4;
+    let min_time = 10; //seconds
+
+    let mut start = Instant::now();
+    let (mut m, mut count, _) = if b.get_turn_color() == Color::White {
         b.get_best_next_move(depth, w_engine)
     } else {
         b.get_best_next_move(depth, b_engine)
     };
-
+    while start.elapsed().as_secs() < min_time && count < 10000 {
+        start = Instant::now();
+        depth += 1;
+        (m, count, _) = if b.get_turn_color() == Color::White {
+            b.get_best_next_move(depth, w_engine)
+        } else {
+            b.get_best_next_move(depth, b_engine)
+        };
+    }
+    let nodes_per_sec = ((count as f64) / (start.elapsed().as_secs_f64())).round();
     print!("CPU evaluated {} moves before choosing to ", count);
     match m {
         Move::Piece(from, to) | Move::Promotion(from, to, _) => {
             match (b.get_piece(from), b.get_piece(to)) {
-                (Some(piece), Some(takes)) => println!(
+                (Some(piece), Some(takes)) => print!(
                     "take {}({}) with {}({})",
                     takes.get_name(),
                     to,
@@ -42,19 +43,20 @@ fn get_cpu_move(b: &Board, w_engine: Option<[f64; 6]>, b_engine: Option<[f64; 6]
                     from
                 ),
                 (Some(piece), None) => {
-                    println!("move {}({}) to {}", piece.get_name(), from, to)
+                    print!("move {}({}) to {}", piece.get_name(), from, to)
                 }
-                _ => println!("move {} to {}", from, to),
+                _ => print!("move {} to {}", from, to),
             }
         }
         Move::KingSideCastle => {
-            println!("castle kingside")
+            print!("castle kingside")
         }
         Move::QueenSideCastle => {
-            println!("castle queenside")
+            print!("castle queenside")
         }
-        Move::Resign => println!("resign"),
+        Move::Resign => print!("resign"),
     }
+    println!(" ({nodes_per_sec} nodes/sec at depth {depth})");
 
     m
 }
@@ -140,12 +142,14 @@ async fn main() -> Result<(), String> {
         let mut white_set = false;
 
         while let Some(eng) = engine_selection.try_next().await.ok().unwrap() {
-            if !white_set {
+            if !white_set {                
                 w_engine = engine_array(Some(eng).unwrap().get_str("engine").ok().unwrap());
+                println!("White Engine: {:?}", w_engine);
                 white_set = true;
             }
             else {
                 b_engine = engine_array(Some(eng).unwrap().get_str("engine").ok().unwrap());
+                println!("Black Engine: {:?}", b_engine);
             }
         }
 
@@ -180,6 +184,15 @@ async fn main() -> Result<(), String> {
                 GameResult::Continuing(next_board) => {
                     b = next_board;
                     println!("{}", b.fen());
+                    println!("{}: {} {} {} {} {} {}", 
+                        b.get_turn_color(),
+                        b.value_for(b.get_turn_color()),
+                        b.mobility_value_for(b.get_turn_color()),
+                        b.naive_value_for(b.get_turn_color()),
+                        b.control_value_for(b.get_turn_color()),
+                        b.closest_value_for(b.get_turn_color()),
+                        b.trade_value_for(b.get_turn_color())
+                    );
 
                     let next_move: String;
                     if b.get_turn_color() == Color::White {
@@ -211,7 +224,7 @@ async fn main() -> Result<(), String> {
                         "_id": max_id,
                         "black_engine": engine_str(b_engine),
                         "white_engine": engine_str(w_engine),
-                        "status": winner.to_string(),
+                        "status": format!("{} loses. {} is victorious.", !winner, winner),
                         "board": b.fen(),
                     };
 
@@ -224,7 +237,7 @@ async fn main() -> Result<(), String> {
                     let white_engine_bson = engine_col.find_one(doc! {"engine":engine_str(w_engine)}, None).await.ok().unwrap().unwrap();
 
                     let elos: (f64, f64) = if winner == Color::White {
-                        calculate_elo(white_engine_bson.get_i32("elo").unwrap() as f64, black_engine_bson.get_i32("elo").unwrap() as f64, GameResult::Victory(winner))
+                        calculate_elo(white_engine_bson.get_f64("elo").unwrap() as f64, black_engine_bson.get_f64("elo").unwrap() as f64, GameResult::Victory(winner))
                     } else {
                         let t = calculate_elo(black_engine_bson.get_f64("elo").unwrap(), white_engine_bson.get_f64("elo").unwrap(), GameResult::Victory(winner));
                         (t.1, t.0)
