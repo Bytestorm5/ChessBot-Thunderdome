@@ -12,7 +12,7 @@ use std::env;
 use std::time::{Duration, Instant};
 
 fn get_cpu_move(b: &Board, w_engine: Option<[f64; 6]>, b_engine: Option<[f64; 6]>) -> Move {
-    let mut depth = 4;
+    let mut depth = 1;
     let min_time = 10; //seconds
 
     let mut start = Instant::now();

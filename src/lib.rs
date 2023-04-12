@@ -29,7 +29,7 @@ mod util;
 pub use util::*;
 
 use rayon::prelude::*;
-use std::{sync::{Arc, Mutex}, println};
+use std::{sync::{Arc, Mutex}, println, thread};
 use dashmap::DashMap;
 use rand::seq::SliceRandom;
 
@@ -292,26 +292,20 @@ pub trait Evaluate: Sized where Self: Sync {
         let color = self.get_current_player_color();
 
         let board_count = Arc::new(Mutex::new(0));
-        let board_cache: Arc<Mutex<DashMap<String, f64>>> = Arc::new(Mutex::new(DashMap::new()));
-
         let arc_engine = Arc::new(engine);
 
         let (best_move, best_move_value): (&Move, f64) = match legal_moves
         .par_iter()        
         .map(|mov| {
             let e = Arc::clone(&arc_engine);
-            let c = Arc::clone(&board_cache);
             let b = self.clone();
             let bc = Arc::clone(&board_count);
             let value = b.apply_eval_move(*mov).minimax(
                 depth,
-                -1000000.0,
-                1000000.0,
                 false,
                 color,
                 &mut bc.lock().unwrap(),
                 *e,
-                &mut c.lock().unwrap(),
             );
             //println!("Move {}: {}", mov.to_string(), value.to_string());
             (mov, value)
@@ -324,7 +318,7 @@ pub trait Evaluate: Sized where Self: Sync {
             }
             else {
                 println!("Move search failed; Resigning.");
-                (&Move::Resign, 0.0)
+                (&Move::Resign, -999.0)
             }
         };
         // .unwrap_or(            
@@ -357,30 +351,24 @@ pub trait Evaluate: Sized where Self: Sync {
         let color = self.get_current_player_color();
 
         let board_count = Arc::new(Mutex::new(0));
-        let board_cache: Arc<Mutex<DashMap<String, f64>>> = Arc::new(Mutex::new(DashMap::new()));
-
         let arc_engine = Arc::new(engine);
         
         let (best_move, best_move_value) = legal_moves
         .par_iter()        
         .map(|mov| {
             let e = Arc::clone(&arc_engine);
-            let c = Arc::clone(&board_cache);
             let b = self.clone();
             let bc = Arc::clone(&board_count);
             let value = b.apply_eval_move(*mov).minimax(
                 depth,
-                -1000000.0,
-                1000000.0,
                 false,
                 color,
                 &mut bc.lock().unwrap(),
                 *e,
-                &mut c.lock().unwrap(),
             );
             (mov, value)
         })
-        .max_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap_or(Ordering::Equal))
+        .min_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap_or(Ordering::Equal))
         .unwrap_or(
     if legal_moves.len() > 0 {
                 (&legal_moves[0], 0.0)
@@ -403,13 +391,10 @@ pub trait Evaluate: Sized where Self: Sync {
     fn minimax(
         &self,
         depth: i32,
-        mut alpha: f64,
-        mut beta: f64,
         is_maximizing: bool,
         getting_move_for: Color,
         board_count: &mut u64,
         engine: Option<[f64; 6]>,
-        mut cache: &mut DashMap<String, f64>,
     ) -> f64 {        
         let eval_engine = match engine {
             Some(a) => a,
@@ -437,7 +422,7 @@ pub trait Evaluate: Sized where Self: Sync {
             if eval_engine[5] != 0.0 {
                 eval += self.trade_value_for(getting_move_for) * eval_engine[5]
             }
-            cache.insert(self.cache_repr(), eval);
+            println!("{board_count}");
             return eval
         }
 
@@ -445,73 +430,69 @@ pub trait Evaluate: Sized where Self: Sync {
         let mut best_move_value;
 
         if is_maximizing {
-            best_move_value = -999999.0;
+            best_move_value = -999999.0;           
 
             for m in &legal_moves {
                 let child_board_value;
-                let repr = self.cache_repr();
-                if cache.contains_key(&repr) {
-                    child_board_value = *cache.get(&repr).unwrap();
-                }
-                else {
-                    child_board_value = self.apply_eval_move(*m).minimax(
-                        depth - 1,
-                        alpha,
-                        beta,
-                        !is_maximizing,
-                        getting_move_for,
-                        board_count,
-                        Some(eval_engine),
-                        &mut cache
-                    );
-                }
+                child_board_value = self.apply_eval_move(*m).minimax(
+                    depth - 1,
+                    !is_maximizing,
+                    getting_move_for,
+                    board_count,
+                    Some(eval_engine),
+                );
                 if child_board_value > best_move_value {
                     best_move_value = child_board_value;
-                }
-
-                if best_move_value > alpha {
-                    alpha = best_move_value
-                }
-
-                if beta <= alpha {
-                    return best_move_value;
                 }
             }
         } else {
             best_move_value = 999999.0;
 
-            for m in &legal_moves {
-                let child_board_value;
-                let repr = self.cache_repr();
-                if cache.contains_key(&repr) {
-                    child_board_value = *cache.get(&repr).unwrap()
-                }
-                else {
-                    child_board_value = self.apply_eval_move(*m).minimax(
+            // let board_count = Arc::new(Mutex::new(board_count));
+            // let arc_engine = Arc::new(engine);
+            // best_move_value = match legal_moves
+            // .par_iter()        
+            // .map(|mov| {
+            //     let e = Arc::clone(&arc_engine);
+            //     let b = self.clone();
+            //     let bc = Arc::clone(&board_count);
+            //     let value = b.apply_eval_move(*mov).minimax(
+            //         depth-1,
+            //         !is_maximizing,
+            //         getting_move_for,
+            //         &mut bc.lock().unwrap(),
+            //         *e,
+            //     );
+            //     //println!("Move {}: {}", mov.to_string(), value.to_string());
+            //     value
+            // })
+            // .min_by(|a,b| a.partial_cmp(&b).unwrap_or(Ordering::Equal)) {
+            //     Some(v) => v,
+            //     None => if legal_moves.len() > 0 {
+            //         //Avoid route that gives an error
+            //         1.0
+            //     }
+            //     else {
+            //         //Avoid Route that leads to no legal moves
+            //         999.0
+            //     }
+            // };
+            let b = Arc::new(Mutex::new(self));            
+            let handles = &legal_moves.into_iter().map(|m| {
+                let this_b = b.clone();
+                thread::spawn(move || {
+                    this_b.apply_eval_move(m).minimax(
                         depth - 1,
-                        alpha,
-                        beta,
                         !is_maximizing,
                         getting_move_for,
                         board_count,
                         Some(eval_engine),
-                        &mut cache
                     );
-                }
-                if child_board_value < best_move_value {
-                    best_move_value = child_board_value;
-                }
-
-                if best_move_value < beta {
-                    beta = best_move_value
-                }
-
-                if beta <= alpha {
-                    return best_move_value;
-                }
-            }
-        }
-
+                })
+            });
+            
+        }        
+        println!("{} | {}", best_move_value, depth);
         best_move_value
     }
 }
