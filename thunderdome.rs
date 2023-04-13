@@ -13,7 +13,8 @@ use std::time::{Duration, Instant};
 
 fn get_cpu_move(b: &Board, w_engine: Option<[f64; 6]>, b_engine: Option<[f64; 6]>) -> Move {
     let mut depth = 4;
-    let min_time = 10; //seconds
+    let min_time = 6.5; //seconds
+    let max_depth = 15;
 
     let mut start = Instant::now();
     let (mut m, mut count, _) = if b.get_turn_color() == Color::White {
@@ -21,9 +22,11 @@ fn get_cpu_move(b: &Board, w_engine: Option<[f64; 6]>, b_engine: Option<[f64; 6]
     } else {
         b.get_best_next_move(depth, b_engine)
     };
-    while start.elapsed().as_secs() < min_time && count < 10000 {
+    while start.elapsed().as_secs_f64() < min_time && count < 10000 && depth < max_depth {
         start = Instant::now();
         depth += 1;
+        println!(" - Redoing with depth {}, previous search was {} nodes under 10s", depth, count);
+        
         (m, count, _) = if b.get_turn_color() == Color::White {
             b.get_best_next_move(depth, w_engine)
         } else {
@@ -315,6 +318,7 @@ async fn main() -> Result<(), String> {
                     break;
                 }
             }
+            println!("");
             thread::sleep(time::Duration::from_millis(1500))
         }
     }

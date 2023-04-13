@@ -273,6 +273,9 @@ pub trait Evaluate: Sized where Self: Sync {
     /// Apply a move to the board for evaluation.
     fn apply_eval_move(&self, m: Move) -> Self;
 
+    fn eval_is_checkmate(&self) -> bool;
+    fn eval_is_stalemate(&self) -> bool;
+
     //Create a concise string representation of the board for caching
     fn cache_repr(&self) -> String;
 
@@ -288,6 +291,10 @@ pub trait Evaluate: Sized where Self: Sync {
     /// is relative to the other player's move ratings as well.
     fn get_best_next_move(&self, depth: i32, engine: Option<[f64; 6]>) -> (Move, u64, f64) {
         let legal_moves = self.get_legal_moves();        
+
+        if legal_moves.len() == 1 {
+            return (legal_moves[0], 0, 0.0)
+        }
 
         let color = self.get_current_player_color();
 
@@ -443,6 +450,32 @@ pub trait Evaluate: Sized where Self: Sync {
 
         let legal_moves = self.get_legal_moves();
         let mut best_move_value;
+
+        //Check if search in this branch must stop
+        if self.eval_is_checkmate() {
+            if is_maximizing {
+                //Enemy is mated! Most Chess experts reccomend doing this
+                return f64::MIN + 1.0
+            }
+            else {
+                //Ally is mated, most chess experts would avoid this
+                //Adding one to avoid errored state
+                return f64::MAX
+            }
+        }
+        else if self.eval_is_stalemate() {
+            //We want to avoid stalemate unless the situation is dire 
+            if is_maximizing {
+                return -15.0
+            }
+            else {
+                return 15.0
+            }
+        }
+        else if legal_moves.len() == 0 {
+            //Should never reach here, but if it does we should avoid it            
+            return f64::MIN;
+        }
 
         if is_maximizing {
             best_move_value = -999999.0;

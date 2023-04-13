@@ -208,6 +208,17 @@ pub struct Board {
     halfmoves: u8,
 }
 impl Evaluate for Board {
+    // Evaluate isn't directly a trait of board so we have to do this
+    #[inline]
+    fn eval_is_checkmate(&self) -> bool {
+        return self.is_checkmate();
+    }
+
+    #[inline]
+    fn eval_is_stalemate(&self) -> bool {
+        return self.is_stalemate()
+    }
+
     #[inline]
     fn value_for(&self, ally_color: Color) -> f64 {
         let mut result = self.squares
@@ -266,28 +277,29 @@ impl Evaluate for Board {
             .sum();
             //Naive engine will get excited at any check, rather than mates
             if self.is_in_check(ally_color) {
-                result -= 999.0;
+                result -= 1.0;
             }
             if self.is_in_check(ally_color.invert()) {
-                result += 999.0;
+                result += 1.0;
             }
             result
     }
     #[inline]
     fn control_value_for(&self, ally_color: Color) -> f64 {
-        let mut result: f64 = 0.0;
-        let color = self.get_current_player_color();
-        for square in &self.squares {
-            if let Some(piece) = square.get_piece() {
-                if piece.get_color() == color {
-                    result += piece.get_legal_moves(self).len() as f64
+        let result = self.squares
+            .iter()
+            .map(|square| match square.get_piece() {
+                Some(piece) => {
+                    if piece.get_color() == ally_color {
+                        piece.get_legal_moves(self).len() as f64
+                    } else {
+                        -(piece.get_legal_moves(&self.change_turn()).len() as f64)
+                    }
                 }
-                else {
-                    result -= piece.get_legal_moves(self).len() as f64
-                }
-            }
-        }
-        result
+                None => 0.0,
+            })
+            .sum();
+        return result;
     }
     #[inline]
     fn closest_value_for(&self, ally_color: Color) -> f64 {
@@ -309,16 +321,30 @@ impl Evaluate for Board {
 
     #[inline]
     fn trade_value_for(&self, ally_color: Color) -> f64 {
-        let material: f64 = self.squares
-                        .iter()
-                        .map(|square| match square.get_piece() {
-                            Some(piece) => {
-                                0.5*piece.get_weighted_value()
-                            }
-                            None => 0.0,
-                        })
-                        .sum();
-        return -(material + self.value_for(ally_color).abs())
+        let mut result = self.squares
+            .iter()
+            .map(|square| match square.get_piece() {
+                Some(piece) => {
+                    if !piece.is_king() {
+                        if piece.get_color() == ally_color {
+                            piece.get_weighted_value() * 0.5
+                        } else {
+                            -piece.get_weighted_value() * 1.5
+                        }
+                    }
+                    else {
+                        //There will always be two kings on the board
+                        //Their values mess up this calculation so we ignore them since they cancel out anyway
+                        0.0
+                    }
+                }
+                None => 0.0,
+            })
+            .sum();
+        if self.is_checkmate() {
+            result -= 999.0;
+        }
+        result
     }
 
     #[inline]
